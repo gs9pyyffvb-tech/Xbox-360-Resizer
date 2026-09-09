@@ -21,6 +21,9 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
+      - name: Restore script permissions
+        run: chmod +x build.sh scripts/*.sh
+
       - name: Install host dependencies
         run: |
           sudo apt-get update
