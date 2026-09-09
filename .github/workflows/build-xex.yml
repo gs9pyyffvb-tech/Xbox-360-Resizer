@@ -14,6 +14,9 @@ on:
       - "build.sh"
       - ".github/workflows/build-xex.yml"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -24,16 +27,54 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Restore script permissions
-        run: chmod +x build.sh scripts/*.sh
+        shell: bash
+        run: |
+          chmod +x build.sh
+          chmod +x scripts/*.sh
 
-      - name: Install host dependencies
+      - name: Install OpenXeChain dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            clang lld llvm binutils cmake ninja-build make git \
-            python3 python3-yaml bzip2 gzip unzip zip gawk curl zlib1g-dev
 
-      - name: Restore OpenXeChain
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            lld \
+            llvm \
+            binutils \
+            cmake \
+            ninja-build \
+            make \
+            git \
+            python3 \
+            python3-yaml \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            bison \
+            flex \
+            gawk \
+            texinfo \
+            bzip2 \
+            gzip \
+            grep \
+            findutils \
+            sed \
+            tar \
+            unzip \
+            zip \
+            curl \
+            openssl \
+            libssl-dev \
+            zlib1g-dev \
+            libzstd-dev \
+            libgmp-dev \
+            libmpfr-dev \
+            libmpc-dev \
+            libboost-dev
+
+      - name: Restore OpenXeChain cache
         id: restore-openxechain
         uses: actions/cache/restore@v4
         with:
@@ -42,20 +83,38 @@ jobs:
           restore-keys: |
             openxechain-partial-ubuntu24-${{ runner.arch }}-v3-
 
+      - name: Check restored compiler
+        shell: bash
+        run: |
+          if [ -x ".openxechain/sysroot/bin/clang" ]; then
+            echo "Cached OpenXeChain compiler restored."
+            .openxechain/sysroot/bin/clang --version || true
+          else
+            echo "No cached compiler found. Full LLVM build will be required."
+          fi
+
       - name: Build OpenXeChain
         id: build-openxechain
         if: steps.restore-openxechain.outputs.cache-hit != 'true'
         continue-on-error: true
-        run: scripts/build-toolchain.sh
+        shell: bash
+        run: |
+          ./scripts/build-toolchain.sh
 
       - name: Show OpenXeChain failure log
         if: steps.build-openxechain.outcome == 'failure'
+        shell: bash
         run: |
-          echo "===== OpenXeChain build.log ====="
-          if [ -f .openxechain/buildscript/build.log ]; then
-            tail -n 1000 .openxechain/buildscript/build.log
+          echo "============================================================"
+          echo "OPENXECHAIN BUILD FAILURE"
+          echo "============================================================"
+
+          if [ -f build.log ]; then
+            tail -n 1500 build.log
           else
-            echo "build.log not found"
+            echo "build.log not found in repository root."
+            echo
+            find . -name build.log -type f -print || true
           fi
 
       - name: Upload OpenXeChain failure log
@@ -63,11 +122,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: OpenXeChain-build-log
-          path: .openxechain/buildscript/build.log
+          path: build.log
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Save partial OpenXeChain
+      - name: Save partial OpenXeChain compiler
         if: steps.build-openxechain.outcome == 'failure'
         uses: actions/cache/save@v4
         with:
@@ -87,24 +146,48 @@ jobs:
           path: .openxechain/sysroot
           key: openxechain-complete-ubuntu24-${{ runner.arch }}-v3
 
-      - name: Fetch stb image libraries
-        run: scripts/fetch-stb.sh
+      - name: Fetch STB image libraries
+        shell: bash
+        run: |
+          ./scripts/fetch-stb.sh
 
-      - name: Build XEX
+      - name: Build Xbox 360 XEX
+        shell: bash
         env:
           OPENXECHAIN: ${{ github.workspace }}/.openxechain/sysroot
-        run: ./build.sh
+        run: |
+          ./build.sh
+
+      - name: Verify XEX
+        shell: bash
+        run: |
+          if [ ! -f build/default.xex ]; then
+            echo "default.xex was not created."
+            exit 1
+          fi
+
+          ls -lh build/default.xex
 
       - name: Package Aurora folder
+        shell: bash
         run: |
           mkdir -p dist/AuroraImageResizer
-          cp build/default.xex dist/AuroraImageResizer/default.xex
-          cp config.ini dist/AuroraImageResizer/config.ini
-          cp README.md dist/AuroraImageResizer/README.txt
+
+          cp build/default.xex \
+             dist/AuroraImageResizer/default.xex
+
+          cp config.ini \
+             dist/AuroraImageResizer/config.ini
+
+          if [ -f README.md ]; then
+            cp README.md \
+               dist/AuroraImageResizer/README.txt
+          fi
+
           cd dist
           zip -r AuroraImageResizer.zip AuroraImageResizer
 
-      - name: Upload XEX artifact
+      - name: Upload compiled XEX
         uses: actions/upload-artifact@v4
         with:
           name: AuroraImageResizer
