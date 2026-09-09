@@ -1,1 +1,66 @@
+name: Build Xbox 360 XEX
 
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'third_party/**'
+      - 'config.ini'
+      - 'build.sh'
+      - '.github/workflows/build-xex.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang lld llvm binutils cmake ninja-build make git \
+            python3 python3-yaml bzip2 gzip unzip zip gawk curl zlib1g-dev
+
+      - name: Cache OpenXeChain sysroot
+        id: cache-openxechain
+        uses: actions/cache@v4
+        with:
+          path: .openxechain/sysroot
+          key: openxechain-ubuntu24-${{ runner.arch }}-v1
+
+      - name: Build OpenXeChain
+        if: steps.cache-openxechain.outputs.cache-hit != 'true'
+        run: scripts/build-toolchain.sh
+
+      - name: Fetch stb image libraries
+        run: scripts/fetch-stb.sh
+
+      - name: Build XEX
+        env:
+          OPENXECHAIN: ${{ github.workspace }}/.openxechain/sysroot
+        run: ./build.sh
+
+      - name: Package Aurora folder
+        run: |
+          mkdir -p dist/AuroraImageResizer
+          cp build/default.xex dist/AuroraImageResizer/default.xex
+          cp config.ini dist/AuroraImageResizer/config.ini
+          cp README.md dist/AuroraImageResizer/README.txt
+          cd dist && zip -r AuroraImageResizer.zip AuroraImageResizer
+
+      - name: Upload XEX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AuroraImageResizer
+          path: |
+            build/default.xex
+            build/config.ini
+            dist/AuroraImageResizer.zip
+          if-no-files-found: error
