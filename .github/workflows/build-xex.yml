@@ -90,7 +90,8 @@ jobs:
             echo "Cached OpenXeChain compiler restored."
             .openxechain/sysroot/bin/clang --version || true
           else
-            echo "No cached compiler found. Full LLVM build will be required."
+            echo "No cached compiler found."
+            echo "A full LLVM build will be required."
           fi
 
       - name: Build OpenXeChain
@@ -101,7 +102,7 @@ jobs:
         run: |
           ./scripts/build-toolchain.sh
 
-      - name: Show OpenXeChain failure log
+      - name: Show OpenXeChain diagnostic logs
         if: steps.build-openxechain.outcome == 'failure'
         shell: bash
         run: |
@@ -109,20 +110,49 @@ jobs:
           echo "OPENXECHAIN BUILD FAILURE"
           echo "============================================================"
 
+          echo
+          echo "===== build.log ====="
+
           if [ -f build.log ]; then
             tail -n 1500 build.log
           else
-            echo "build.log not found in repository root."
-            echo
-            find . -name build.log -type f -print || true
+            echo "build.log not found"
           fi
 
-      - name: Upload OpenXeChain failure log
+          echo
+          echo "===== Newlib config.log ====="
+
+          if [ -f .openxechain/buildscript/build/config.log ]; then
+            tail -n 2000 .openxechain/buildscript/build/config.log
+          else
+            echo "config.log not found at expected location."
+            echo
+            find . -name config.log -type f -print || true
+          fi
+
+      - name: Prepare OpenXeChain diagnostic files
+        if: steps.build-openxechain.outcome == 'failure'
+        shell: bash
+        run: |
+          mkdir -p diagnostic
+
+          if [ -f build.log ]; then
+            cp build.log diagnostic/build.log
+          fi
+
+          if [ -f .openxechain/buildscript/build/config.log ]; then
+            cp .openxechain/buildscript/build/config.log \
+               diagnostic/newlib-config.log
+          fi
+
+          find diagnostic -type f -maxdepth 1 -print || true
+
+      - name: Upload OpenXeChain diagnostic logs
         if: steps.build-openxechain.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
-          name: OpenXeChain-build-log
-          path: build.log
+          name: OpenXeChain-diagnostics
+          path: diagnostic/
           if-no-files-found: warn
           retention-days: 7
 
