@@ -33,9 +33,15 @@ from pathlib import Path
 path = Path(sys.argv[1])
 text = path.read_text()
 
-marker = "Restored cross compiler found; skipping LLVM rebuild."
+# ---------------------------------------------------------
+# PATCH 1:
+# If GitHub restored our previously compiled LLVM/Clang,
+# don't spend another 90 minutes rebuilding it.
+# ---------------------------------------------------------
 
-if marker not in text:
+skip_marker = "Restored cross compiler found; skipping LLVM rebuild."
+
+if skip_marker not in text:
     start_marker = "# Configure it first"
     end_marker = "rm -rf * # Clear the build directory, ready for xecorelib"
 
@@ -52,8 +58,38 @@ else
 fi'''
 
     text = text[:start] + replacement + text[end:]
-    path.write_text(text)
+
+
+# ---------------------------------------------------------
+# PATCH 2:
+# OpenXeChain invokes clang-cpp without the Xbox sysroot.
+#
+# That caused Clang's built-in limits.h to fall through to:
+#
+#   /usr/include/limits.h
+#
+# on the Ubuntu GitHub runner, which then failed looking for:
+#
+#   bits/libc-header-start.h
+#
+# Explicitly give the preprocessor the Xbox sysroot and
+# xecorelib bootstrap headers.
+# ---------------------------------------------------------
+
+old_cpp = 'CPP="${PREFIX}/bin/clang-cpp" \\\n'
+new_cpp = 'CPP="${PREFIX}/bin/clang-cpp --sysroot=${PREFIX} -I${PWD}/xecorelibtmp/include" \\\n'
+
+if old_cpp in text:
+    text = text.replace(old_cpp, new_cpp, 1)
+elif "--sysroot=${PREFIX}" not in text:
+    raise RuntimeError(
+        "Could not locate OpenXeChain Newlib CPP configuration line."
+    )
+
+path.write_text(text)
 PY
+
+echo "OpenXeChain wrapper patches applied."
 
 set +e
 
