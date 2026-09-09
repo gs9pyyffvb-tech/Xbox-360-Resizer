@@ -1,0 +1,7 @@
+iPhone / Working Copy setup:
+1. Import all files/folders into your Working Copy repository.
+2. Rename the folder named 'github' to '.github'.
+3. Confirm this path exists:
+   .github/workflows/build-xex.yml
+4. Commit and push to GitHub.
+5. Open GitHub Actions and run the Xbox 360 XEX workflow.
