@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$ROOT/.openxechain"
 SRC="$WORK/buildscript"
 PREFIX="$WORK/sysroot"
+LOG="$ROOT/build.log"
 
 mkdir -p "$WORK"
 
@@ -68,10 +69,13 @@ if [[ "$RESULT" -ne 0 ]]; then
     echo "OPENXECHAIN FAILED - BUILD.LOG"
     echo "============================================================"
 
-    if [[ -f "$SRC/build.log" ]]; then
-        tail -n 500 "$SRC/build.log"
+    if [[ -f "$LOG" ]]; then
+        tail -n 1000 "$LOG"
     else
-        echo "build.log was not found."
+        echo "build.log was not found at: $LOG"
+        echo
+        echo "Searching for other build.log files:"
+        find "$ROOT" -name build.log -type f -print 2>/dev/null || true
     fi
 
     echo "============================================================"
