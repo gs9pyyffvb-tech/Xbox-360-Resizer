@@ -3,14 +3,16 @@ name: Build Xbox 360 XEX
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
     paths:
-      - 'src/**'
-      - 'scripts/**'
-      - 'third_party/**'
-      - 'config.ini'
-      - 'build.sh'
-      - '.github/workflows/build-xex.yml'
+      - "src/**"
+      - "scripts/**"
+      - "third_party/**"
+      - "config.ini"
+      - "build.sh"
+      - ".github/workflows/build-xex.yml"
 
 jobs:
   build:
@@ -31,16 +33,59 @@ jobs:
             clang lld llvm binutils cmake ninja-build make git \
             python3 python3-yaml bzip2 gzip unzip zip gawk curl zlib1g-dev
 
-      - name: Cache OpenXeChain sysroot
-        id: cache-openxechain
-        uses: actions/cache@v4
+      - name: Restore OpenXeChain
+        id: restore-openxechain
+        uses: actions/cache/restore@v4
         with:
           path: .openxechain/sysroot
-          key: openxechain-ubuntu24-${{ runner.arch }}-v1
+          key: openxechain-complete-ubuntu24-${{ runner.arch }}-v3
+          restore-keys: |
+            openxechain-partial-ubuntu24-${{ runner.arch }}-v3-
 
       - name: Build OpenXeChain
-        if: steps.cache-openxechain.outputs.cache-hit != 'true'
+        id: build-openxechain
+        if: steps.restore-openxechain.outputs.cache-hit != 'true'
+        continue-on-error: true
         run: scripts/build-toolchain.sh
+
+      - name: Show OpenXeChain failure log
+        if: steps.build-openxechain.outcome == 'failure'
+        run: |
+          echo "===== OpenXeChain build.log ====="
+          if [ -f .openxechain/buildscript/build.log ]; then
+            tail -n 1000 .openxechain/buildscript/build.log
+          else
+            echo "build.log not found"
+          fi
+
+      - name: Upload OpenXeChain failure log
+        if: steps.build-openxechain.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenXeChain-build-log
+          path: .openxechain/buildscript/build.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Save partial OpenXeChain
+        if: steps.build-openxechain.outcome == 'failure'
+        uses: actions/cache/save@v4
+        with:
+          path: .openxechain/sysroot
+          key: openxechain-partial-ubuntu24-${{ runner.arch }}-v3-${{ github.run_id }}
+
+      - name: Stop after OpenXeChain failure
+        if: steps.build-openxechain.outcome == 'failure'
+        run: exit 1
+
+      - name: Save completed OpenXeChain
+        if: >
+          steps.restore-openxechain.outputs.cache-hit != 'true' &&
+          steps.build-openxechain.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .openxechain/sysroot
+          key: openxechain-complete-ubuntu24-${{ runner.arch }}-v3
 
       - name: Fetch stb image libraries
         run: scripts/fetch-stb.sh
@@ -56,7 +101,8 @@ jobs:
           cp build/default.xex dist/AuroraImageResizer/default.xex
           cp config.ini dist/AuroraImageResizer/config.ini
           cp README.md dist/AuroraImageResizer/README.txt
-          cd dist && zip -r AuroraImageResizer.zip AuroraImageResizer
+          cd dist
+          zip -r AuroraImageResizer.zip AuroraImageResizer
 
       - name: Upload XEX artifact
         uses: actions/upload-artifact@v4
