@@ -12,6 +12,8 @@
 #include <xecore/xam_io.h>
 #include <xecore/xam_loader.h>
 
+typedef NTSTATUS STATUS;
+
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_STDIO
 #include "stb_image.h"
