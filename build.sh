@@ -35,6 +35,7 @@ echo "Compiling Image Resizer..."
     -I"$ROOT/third_party" \
     "$ROOT/src/main.c" \
     "$ROOT/src/stb_impl.c" \
+    -lm \
     -o "$ROOT/build/ImageResizer.exe"
 
 echo "Creating XEX..."
